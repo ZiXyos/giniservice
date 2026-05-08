@@ -20,6 +20,8 @@ type HTTPServer struct {
 
 	server *http.Server
 	engine *gin.Engine
+
+	tel *telemtry
 }
 
 type Options func(*HTTPServer) error
