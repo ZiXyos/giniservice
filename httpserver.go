@@ -18,7 +18,7 @@ type HTTPServer struct {
 	server *http.Server
 	engine *gin.Engine
 
-	tel *telemtry
+	tel *telemetry
 	cfg *Config
 }
 

@@ -7,11 +7,9 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 )
 
-type telemtry struct {
+type telemetry struct {
 	exporter *otlptrace.Exporter
 }
-
-type telemetryOptions func(*telemtry) error
 
 func (h *HTTPServer) initTelemetry(ctx context.Context) error {
 	var opts []otlptracegrpc.Option
