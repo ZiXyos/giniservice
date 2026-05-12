@@ -7,27 +7,26 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 )
 
-
 type telemtry struct {
 	exporter *otlptrace.Exporter
 }
 
 type telemetryOptions func(*telemtry) error
 
-func (s *HTTPServer) WithTelemetry(ctx context.Context, opts ...telemetryOptions) Options {
-	return func(hs *HTTPServer) error {
-		exporter, err := otlptracegrpc.New(ctx) // need to map opts to otlp_opts
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to create new exporter", "error", err.Error())
-			panic(err)
-		}
-		hs.tel.exporter = exporter
-
-		return nil
+func (h *HTTPServer) initTelemetry(ctx context.Context) error {
+	var opts []otlptracegrpc.Option
+	if ep := h.cfg.TelemetryConfig.Endpoint; ep != "" {
+		opts = append(opts, otlptracegrpc.WithEndpoint(ep), otlptracegrpc.WithInsecure())
 	}
+
+	exp, err := otlptracegrpc.New(ctx, opts...)
+	if err != nil {
+		return err
+	}
+
+	h.tel.exporter = exp
+	return nil
 }
-
-func (s *HTTPServer) initTracer(ctx context.Context) func(context.Context) error {
-
-	return s.tel.exporter.Shutdown
+func (h *HTTPServer) initTracer(ctx context.Context) func(context.Context) error {
+	return nil
 }

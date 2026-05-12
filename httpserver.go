@@ -11,9 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// HTTPServerConfig represents the configuration for the HTTPServer component.
-type HTTPServerConfig struct{}
-
 // HTTPServer represents an HTTP server component.
 type HTTPServer struct {
 	logger *slog.Logger
@@ -22,6 +19,7 @@ type HTTPServer struct {
 	engine *gin.Engine
 
 	tel *telemtry
+	cfg *Config
 }
 
 type Options func(*HTTPServer) error
@@ -42,7 +40,7 @@ func withEngine(engine *gin.Engine) Options {
 }
 
 // WithHTTPServer inject the HTTP Server to the HTTPServer.
-func WithHTTPServer(config *HTTPServerConfig) Options {
+func WithHTTPServer(config *Config) Options {
 	return func(hs *HTTPServer) error {
 		if hs.engine == nil {
 			return fmt.Errorf("engine is nil") //should impl errors const
