@@ -8,7 +8,7 @@ import (
 
 // Config represents the configuration for the HTTPServer component.
 type Config struct {
-	serviceName string `koanf:"service_name"`
+	ServiceName string `koanf:"service_name"`
 	HTTPServer  struct {
 		Port         int           `koanf:"port"`
 		ReadTimeout  time.Duration `koanf:"read_timeout"`

@@ -23,6 +23,19 @@ type telemetry struct {
 	err  error
 }
 
+func WithTelemetry(ctx context.Context) Options {
+	return func(hs *HTTPServer) error {
+		if hs.cfg == nil || !hs.cfg.TelemetryConfig.Enabled {
+			return nil
+		}
+		if hs.engine == nil {
+			return fmt.Errorf("telemetry: engine must be initialized before WithTelemetry")
+		}
+		hs.tel = &telemetry{}
+		return hs.initTelemetry(ctx)
+	}
+}
+
 func (h *HTTPServer) initTelemetry(ctx context.Context) error {
 	var opts []otlptracegrpc.Option
 	if ep := h.cfg.TelemetryConfig.Endpoint; ep != "" {

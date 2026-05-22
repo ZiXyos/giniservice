@@ -48,16 +48,39 @@ func WithHTTPServer(config *Config) Options {
 		if hs.engine == nil {
 			return fmt.Errorf("engine is nil") //should impl errors const
 		}
+		if config == nil {
+			return fmt.Errorf("config is nil")
+		}
 
-		hs.server = &http.Server{ //load from config or default val
-			Addr:         ":8080",
+		hs.cfg = config
+
+		addr := ":8080"
+		if config.HTTPServer.Port != 0 {
+			addr = fmt.Sprintf(":%d", config.HTTPServer.Port)
+		}
+		readTimeout := config.HTTPServer.ReadTimeout
+		if readTimeout == 0 {
+			readTimeout = 5 * time.Second
+		}
+		writeTimeout := config.HTTPServer.WriteTimeout
+		if writeTimeout == 0 {
+			writeTimeout = 10 * time.Second
+		}
+
+		hs.server = &http.Server{
+			Addr:         addr,
 			Handler:      hs.engine,
-			ReadTimeout:  5 * time.Second,
-			WriteTimeout: 10 * time.Second,
+			ReadTimeout:  readTimeout,
+			WriteTimeout: writeTimeout,
 		}
 
 		return nil
 	}
+}
+
+// Engine exposes the underlying gin engine so handlers can be registered.
+func (h *HTTPServer) Engine() *gin.Engine {
+	return h.engine
 }
 
 // NewHTTPServer creates a new HTTPServer component.
@@ -103,6 +126,10 @@ func (h *HTTPServer) Shutdown(ctx context.Context) error {
 		return err
 	}
 
+	if err := h.tel.Shutdown(ctx); err != nil {
+		h.logger.WarnContext(ctx, "failed to shutdown telemetry", "error", err)
+	}
+
 	return nil
 }
 
@@ -110,5 +137,5 @@ func (h *HTTPServer) Name() string {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	return h.cfg.serviceName
+	return h.cfg.ServiceName
 }
