@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,6 +21,8 @@ type HTTPServer struct {
 
 	tel *telemetry
 	cfg *Config
+
+	mu sync.RWMutex
 }
 
 type Options func(*HTTPServer) error
@@ -101,4 +104,11 @@ func (h *HTTPServer) Shutdown(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (h *HTTPServer) Name() string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	return h.cfg.serviceName
 }
