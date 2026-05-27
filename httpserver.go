@@ -148,22 +148,16 @@ func (h *HTTPServer) Name() string {
 	return h.cfg.ServiceName
 }
 
-// WithTelemetry wires the OTel SDK and the otelgin middleware if telemetry is
-// enabled in the config. Devs only need to flip Telemetry.Enabled; nothing else
-// to inject.
-func WithTelemetry(ctx context.Context) Options {
+// WithTelemetry attaches an externally-built provider so the same instance can
+// be shared with the application's logger and any other components. Passing
+// nil is a no-op.
+func WithTelemetry(p *telemetry.Provider) Options {
 	return func(hs *HTTPServer) error {
-		if hs.cfg == nil {
-			return fmt.Errorf("no configuration provided")
-		}
-
-		if !hs.cfg.Telemetry.Enabled {
+		if p == nil {
 			return nil
 		}
-
-		p, err := telemetry.NewProvider(ctx, hs.cfg.ServiceName, hs.cfg.ServiceVersion, hs.cfg.Telemetry)
-		if err != nil {
-			return err
+		if hs.cfg == nil {
+			return fmt.Errorf("no configuration provided")
 		}
 
 		hs.tel = p
