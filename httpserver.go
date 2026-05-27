@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zixyos/httpservice/telemetry"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
@@ -131,8 +132,10 @@ func (h *HTTPServer) Shutdown(ctx context.Context) error {
 		return err
 	}
 
-	if err := h.tel.Shutdown(ctx); err != nil {
-		h.logger.WarnContext(ctx, "failed to shutdown telemetry", "error", err)
+	if h.tel != nil {
+		if err := h.tel.Shutdown(ctx); err != nil {
+			h.logger.WarnContext(ctx, "failed to shutdown telemetry", "error", err)
+		}
 	}
 
 	return nil
@@ -145,31 +148,26 @@ func (h *HTTPServer) Name() string {
 	return h.cfg.ServiceName
 }
 
+// WithTelemetry wires the OTel SDK and the otelgin middleware if telemetry is
+// enabled in the config. Devs only need to flip Telemetry.Enabled; nothing else
+// to inject.
 func WithTelemetry(ctx context.Context) Options {
 	return func(hs *HTTPServer) error {
 		if hs.cfg == nil {
 			return fmt.Errorf("no configuration provided")
 		}
 
-		if !hs.cfg.TelemetryConfig.Enabled {
+		if !hs.cfg.Telemetry.Enabled {
 			return nil
 		}
 
-		return hs.initTelemetry(ctx)
+		p, err := telemetry.NewProvider(ctx, hs.cfg.ServiceName, hs.cfg.ServiceVersion, hs.cfg.Telemetry)
+		if err != nil {
+			return err
+		}
+
+		hs.tel = p
+		hs.engine.Use(otelgin.Middleware(hs.cfg.ServiceName))
+		return nil
 	}
-}
-
-func (h *HTTPServer) initTelemetry(ctx context.Context) error {
-	t, err := newTelemetry(ctx, h.cfg)
-	if err != nil {
-		return err
-	}
-
-	h.tel = t
-	h.engine.Use(otelgin.Middleware(h.Name()))
-	return nil
-}
-
-func (h *HTTPServer) initTracer(ctx context.Context) func(context.Context) error {
-	return nil
 }
