@@ -8,8 +8,9 @@ import (
 
 // Config represents the configuration for the HTTPServer component.
 type Config struct {
-	ServiceName string `koanf:"service_name"`
-	HTTPServer  struct {
+	ServiceName    string `koanf:"service_name"`
+	ServiceVersion string `koanf:"service_version"`
+	HTTPServer     struct {
 		Port         int           `koanf:"port"`
 		ReadTimeout  time.Duration `koanf:"read_timeout"`
 		WriteTimeout time.Duration `koanf:"write_timeout"`
@@ -17,6 +18,7 @@ type Config struct {
 	TelemetryConfig struct {
 		Enabled  bool   `koanf:"enabled"`
 		Endpoint string `koanf:"endpoint"`
+		Insecure bool   `koanf:"insecure"`
 	} `koanf:"telemetry"`
 }
 

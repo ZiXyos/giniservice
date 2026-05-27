@@ -10,7 +10,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
+
+type Telemetry interface {
+	Shutdown(context.Context) error
+}
 
 // HTTPServer represents an HTTP server component.
 type HTTPServer struct {
@@ -19,10 +24,10 @@ type HTTPServer struct {
 	server *http.Server
 	engine *gin.Engine
 
-	tel *telemetry
 	cfg *Config
 
-	mu sync.RWMutex
+	tel Telemetry
+	mu  sync.RWMutex
 }
 
 type Options func(*HTTPServer) error
@@ -138,4 +143,33 @@ func (h *HTTPServer) Name() string {
 	defer h.mu.RUnlock()
 
 	return h.cfg.ServiceName
+}
+
+func WithTelemetry(ctx context.Context) Options {
+	return func(hs *HTTPServer) error {
+		if hs.cfg == nil {
+			return fmt.Errorf("no configuration provided")
+		}
+
+		if !hs.cfg.TelemetryConfig.Enabled {
+			return nil
+		}
+
+		return hs.initTelemetry(ctx)
+	}
+}
+
+func (h *HTTPServer) initTelemetry(ctx context.Context) error {
+	t, err := newTelemetry(ctx, h.cfg)
+	if err != nil {
+		return err
+	}
+
+	h.tel = t
+	h.engine.Use(otelgin.Middleware(h.Name()))
+	return nil
+}
+
+func (h *HTTPServer) initTracer(ctx context.Context) func(context.Context) error {
+	return nil
 }

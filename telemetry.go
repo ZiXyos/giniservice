@@ -6,13 +6,13 @@ import (
 	"sync"
 	"time"
 
-	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	sdkresource "go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
 type telemetry struct {
@@ -23,28 +23,15 @@ type telemetry struct {
 	err  error
 }
 
-func WithTelemetry(ctx context.Context) Options {
-	return func(hs *HTTPServer) error {
-		if hs.cfg == nil || !hs.cfg.TelemetryConfig.Enabled {
-			return nil
-		}
-		if hs.engine == nil {
-			return fmt.Errorf("telemetry: engine must be initialized before WithTelemetry")
-		}
-		hs.tel = &telemetry{}
-		return hs.initTelemetry(ctx)
-	}
-}
+func newTelemetry(ctx context.Context, cfg *Config) (*telemetry, error) {
+	tel := &telemetry{}
 
-func (h *HTTPServer) initTelemetry(ctx context.Context) error {
 	var opts []otlptracegrpc.Option
-	if ep := h.cfg.TelemetryConfig.Endpoint; ep != "" {
-		opts = append(opts, otlptracegrpc.WithEndpoint(ep), otlptracegrpc.WithInsecure())
-	}
-
-	exp, err := otlptracegrpc.New(ctx, opts...)
-	if err != nil {
-		return err
+	if ep := cfg.TelemetryConfig.Endpoint; ep != "" {
+		opts = append(opts, otlptracegrpc.WithEndpoint(ep))
+		if cfg.TelemetryConfig.Insecure {
+			opts = append(opts, otlptracegrpc.WithInsecure())
+		}
 	}
 
 	res, err := sdkresource.New(
@@ -53,28 +40,30 @@ func (h *HTTPServer) initTelemetry(ctx context.Context) error {
 		sdkresource.WithProcess(),
 		sdkresource.WithHost(),
 		sdkresource.WithTelemetrySDK(),
+		sdkresource.WithAttributes(
+			semconv.ServiceName(cfg.ServiceName),
+			semconv.ServiceVersion(cfg.ServiceVersion),
+		),
 	)
 	if err != nil {
-		return fmt.Errorf("unable to initialize resource: %w", err)
+		return nil, fmt.Errorf("unable to initialize resource: %w", err)
 	}
 
-	traceProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exp),
-		sdktrace.WithResource(res),
+	exp, err := otlptracegrpc.New(ctx, opts...)
+
+	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.AlwaysSample())),
+		sdktrace.WithResource(res),
+		sdktrace.WithBatcher(exp),
 	)
 
-	otel.SetTracerProvider(traceProvider)
+	otel.SetTracerProvider(tp)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
-	h.tel.tp = traceProvider
-	h.tel.exporter = exp
-	h.engine.Use(otelgin.Middleware(h.Name()))
-	return nil
-}
+	tel.exporter = exp
+	tel.tp = tp
 
-func (h *HTTPServer) initTracer(ctx context.Context) func(context.Context) error {
-	return nil
+	return tel, nil
 }
 
 func (t *telemetry) Shutdown(ctx context.Context) error {
