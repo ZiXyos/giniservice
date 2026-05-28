@@ -145,7 +145,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 
 	if s.tel != nil {
-		if err := s.tel.Shutdown(ctx); err != nil {
+		telCtx, telCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer telCancel()
+
+		if err := s.tel.Shutdown(telCtx); err != nil {
 			s.logger.WarnContext(ctx, "failed to shutdown telemetry", "error", err)
 		}
 	}
