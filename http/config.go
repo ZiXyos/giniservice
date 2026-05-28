@@ -1,4 +1,4 @@
-package httpservice
+package http
 
 import (
 	"time"
