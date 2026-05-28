@@ -135,11 +135,20 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		close(done)
 	}()
 
+	var shutdownErr error
 	select {
 	case <-done:
-		return nil
+		shutdownErr = nil
 	case <-ctx.Done():
 		s.srv.Stop()
-		return ctx.Err()
+		shutdownErr = ctx.Err()
 	}
+
+	if s.tel != nil {
+		if err := s.tel.Shutdown(ctx); err != nil {
+			s.logger.WarnContext(ctx, "failed to shutdown telemetry", "error", err)
+		}
+	}
+
+	return shutdownErr
 }
