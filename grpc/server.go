@@ -149,7 +149,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		defer telCancel()
 
 		if err := s.tel.Shutdown(telCtx); err != nil {
-			s.logger.WarnContext(ctx, "failed to shutdown telemetry", "error", err)
+			s.logger.WarnContext(telCtx, "failed to shutdown telemetry", "error", err)
 		}
 	}
 
