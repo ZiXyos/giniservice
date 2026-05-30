@@ -1,4 +1,4 @@
-module github.com/zixyos/httpservice
+module github.com/zixyos/giniservice
 
 go 1.25.1
 
