@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/zixyos/httpservice/telemetry"
+	"github.com/zixyos/giniservice/telemetry"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
