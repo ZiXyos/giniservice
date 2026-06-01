@@ -15,10 +15,6 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
-type Telemetry interface {
-	Shutdown(context.Context) error
-}
-
 // Server represents an HTTP Server component.
 type Server struct {
 	logger *slog.Logger
@@ -100,7 +96,9 @@ func (h *Server) Engine() *gin.Engine {
 	return h.engine
 }
 
-// NewHTTPServer creates a new HTTPServer component.
+// NewHTTPServer creates a new HTTPServer component. Telemetry is set up
+// automatically when cfg.Telemetry.Enabled, so the calling service never
+// touches the OTel provider directly.
 func NewHTTPServer(opts ...Options) *Server {
 	hs := &Server{}
 
@@ -113,6 +111,13 @@ func NewHTTPServer(opts ...Options) *Server {
 		if err := opt(hs); err != nil {
 			panic(err)
 		}
+	}
+
+	if hs.cfg != nil && hs.cfg.Telemetry.Enabled {
+		if err := telemetry.Init(context.Background(), hs.cfg.ServiceName, hs.cfg.ServiceVersion, hs.cfg.Telemetry); err != nil {
+			panic(err)
+		}
+		hs.engine.Use(otelgin.Middleware(hs.cfg.ServiceName))
 	}
 
 	return hs
@@ -143,10 +148,8 @@ func (h *Server) Stop(ctx context.Context) error {
 		return err
 	}
 
-	if h.tel != nil {
-		if err := h.tel.Shutdown(ctx); err != nil {
-			h.logger.WarnContext(ctx, "failed to shutdown telemetry", "error", err)
-		}
+	if err := telemetry.Shutdown(ctx); err != nil {
+		h.logger.WarnContext(ctx, "failed to shutdown telemetry", "error", err)
 	}
 
 	return nil
@@ -166,22 +169,4 @@ func (h *Server) Name() string {
 	defer h.mu.RUnlock()
 
 	return h.cfg.ServiceName
-}
-
-// WithTelemetry attaches an externally-built provider so the same instance can
-// be shared with the application's logger and any other components. Passing
-// nil is a no-op.
-func WithTelemetry(p *telemetry.Provider) Options {
-	return func(hs *Server) error {
-		if p == nil {
-			return nil
-		}
-		if hs.cfg == nil {
-			return fmt.Errorf("no configuration provided")
-		}
-
-		hs.tel = p
-		hs.engine.Use(otelgin.Middleware(hs.cfg.ServiceName))
-		return nil
-	}
 }

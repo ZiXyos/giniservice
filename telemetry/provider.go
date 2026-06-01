@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otellog "go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
@@ -20,22 +19,37 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
 
-// Provider owns the OTel SDK state and is the single point of shutdown.
-type Provider struct {
-	exporter *otlptrace.Exporter
-	tp       *sdktrace.TracerProvider
-	lp       *sdklog.LoggerProvider
-
-	once sync.Once
-	err  error
+type provider struct {
+	tp *sdktrace.TracerProvider
+	lp *sdklog.LoggerProvider
 }
 
-// NewProvider builds the OTel SDK and installs it as the global provider.
-func NewProvider(ctx context.Context, serviceName, serviceVersion string, cfg Config) (*Provider, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, err
-	}
+var (
+	initOnce sync.Once
+	initErr  error
+	inst     *provider
 
+	shutOnce sync.Once
+	shutErr  error
+)
+
+// Init installs the OTel SDK as the process-wide provider when telemetry is
+// enabled. Idempotent: only the first caller's arguments take effect, so
+// multiple components (http, grpc, ...) can call it safely.
+func Init(ctx context.Context, serviceName, serviceVersion string, cfg Config) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	initOnce.Do(func() {
+		inst, initErr = newProvider(ctx, serviceName, serviceVersion, cfg)
+	})
+	return initErr
+}
+
+func newProvider(ctx context.Context, serviceName, serviceVersion string, cfg Config) (*provider, error) {
 	var traceOpts []otlptracegrpc.Option
 	var logOpts []otlploggrpc.Option
 	if cfg.Endpoint != "" {
@@ -90,37 +104,38 @@ func NewProvider(ctx context.Context, serviceName, serviceVersion string, cfg Co
 	))
 	otellog.SetLoggerProvider(lp)
 
-	return &Provider{exporter: traceExp, tp: tp, lp: lp}, nil
+	return &provider{tp: tp, lp: lp}, nil
 }
 
-func (p *Provider) LogHandler(serviceName string) slog.Handler {
-	if p == nil || p.lp == nil {
+// LogHandler returns a slog.Handler bound to the global OTel logger provider.
+// Returns nil if Init has not installed a provider yet.
+func LogHandler(serviceName string) slog.Handler {
+	if inst == nil || inst.lp == nil {
 		return nil
 	}
-	return otelslog.NewHandler(serviceName, otelslog.WithLoggerProvider(p.lp))
+	return otelslog.NewHandler(serviceName, otelslog.WithLoggerProvider(inst.lp))
 }
 
-// Shutdown flushes pending spans and logs; safe to call more than once.
-func (p *Provider) Shutdown(ctx context.Context) error {
-	if p == nil {
+// Shutdown flushes pending spans and logs. Idempotent: safe to call from each
+// component's own shutdown without coordination.
+func Shutdown(ctx context.Context) error {
+	if inst == nil {
 		return nil
 	}
-
-	p.once.Do(func() {
+	shutOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		if p.tp != nil {
-			if err := p.tp.Shutdown(ctx); err != nil {
-				p.err = err
+		if inst.tp != nil {
+			if err := inst.tp.Shutdown(ctx); err != nil {
+				shutErr = err
 			}
 		}
-		if p.lp != nil {
-			if err := p.lp.Shutdown(ctx); err != nil && p.err == nil {
-				p.err = err
+		if inst.lp != nil {
+			if err := inst.lp.Shutdown(ctx); err != nil && shutErr == nil {
+				shutErr = err
 			}
 		}
 	})
-
-	return p.err
+	return shutErr
 }

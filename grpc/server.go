@@ -16,18 +16,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Telemetry is the shutdown surface the grpc server holds onto so it can flush
-// telemetry along with the rest of the lifecycle if the caller chooses.
-type Telemetry interface {
-	Shutdown(context.Context) error
-}
-
 // Server wraps *grpc.Server with logger, config, and lifecycle.
 type Server struct {
 	logger *slog.Logger
 	cfg    *Config
 
-	tel        Telemetry
 	serverOpts []grpc.ServerOption
 
 	serviceID   serviceloader.UUID
@@ -61,19 +54,6 @@ func WithConfig(cfg *Config) Options {
 	}
 }
 
-// WithTelemetry attaches an externally-built provider and registers the
-// otelgrpc stats handler on the server. Passing nil is a no-op.
-func WithTelemetry(p *telemetry.Provider) Options {
-	return func(s *Server) error {
-		if p == nil {
-			return nil
-		}
-		s.tel = p
-		s.serverOpts = append(s.serverOpts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
-		return nil
-	}
-}
-
 // WithServerOption is an escape hatch for passing raw grpc.ServerOption values.
 func WithServerOption(opts ...grpc.ServerOption) Options {
 	return func(s *Server) error {
@@ -97,6 +77,13 @@ func NewServer(opts ...Options) *Server {
 		if err := opt(s); err != nil {
 			panic(err)
 		}
+	}
+
+	if s.cfg != nil && s.cfg.Telemetry.Enabled {
+		if err := telemetry.Init(context.Background(), s.cfg.ServiceName, s.cfg.ServiceVersion, s.cfg.Telemetry); err != nil {
+			panic(err)
+		}
+		s.serverOpts = append(s.serverOpts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
 	}
 
 	s.srv = grpc.NewServer(s.serverOpts...)
@@ -154,13 +141,10 @@ func (s *Server) Stop(ctx context.Context) error {
 		shutdownErr = ctx.Err()
 	}
 
-	if s.tel != nil {
-		telCtx, telCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer telCancel()
-
-		if err := s.tel.Shutdown(telCtx); err != nil {
-			s.logger.WarnContext(telCtx, "failed to shutdown telemetry", "error", err)
-		}
+	telCtx, telCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer telCancel()
+	if err := telemetry.Shutdown(telCtx); err != nil {
+		s.logger.WarnContext(telCtx, "failed to shutdown telemetry", "error", err)
 	}
 
 	return shutdownErr
