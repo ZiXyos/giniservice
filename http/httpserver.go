@@ -125,6 +125,13 @@ func NewHTTPServer(opts ...Options) (*Server, error) {
 		}
 	}
 
+	if hs.cfg != nil && hs.cfg.Telemetry.Enabled {
+		if err := telemetry.Init(context.Background(), hs.cfg.ServiceName, hs.cfg.ServiceVersion, hs.cfg.Telemetry); err != nil {
+			panic(err)
+		}
+		hs.engine.Use(otelgin.Middleware(hs.cfg.ServiceName))
+	}
+
 	return hs, telemetryErr
 }
 
