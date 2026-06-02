@@ -94,13 +94,6 @@ func NewServer(opts ...Options) (*Server, error) {
 		}
 	}
 
-	if s.cfg != nil && s.cfg.Telemetry.Enabled {
-		if err := telemetry.Init(context.Background(), s.cfg.ServiceName, s.cfg.ServiceVersion, s.cfg.Telemetry); err != nil {
-			panic(err)
-		}
-		s.serverOpts = append(s.serverOpts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
-	}
-
 	s.srv = grpc.NewServer(s.serverOpts...)
 	return s, telemetryErr
 }
