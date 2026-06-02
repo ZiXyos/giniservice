@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/zixyos/giniservice/telemetry"
+	serviceloader "github.com/zixyos/goloader/service"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
@@ -28,8 +30,13 @@ type Server struct {
 	tel        Telemetry
 	serverOpts []grpc.ServerOption
 
+	serviceID   serviceloader.UUID
+	serviceName string
+
 	srv *grpc.Server
 	lis net.Listener
+
+	mu sync.RWMutex
 }
 
 // Options is the functional-option type for the Server.
@@ -67,8 +74,7 @@ func WithTelemetry(p *telemetry.Provider) Options {
 	}
 }
 
-// WithServerOption is an escape hatch for passing raw grpc.ServerOption values
-// (interceptors, TLS creds, max-msg-size, etc.) without us re-exporting them.
+// WithServerOption is an escape hatch for passing raw grpc.ServerOption values.
 func WithServerOption(opts ...grpc.ServerOption) Options {
 	return func(s *Server) error {
 		s.serverOpts = append(s.serverOpts, opts...)
@@ -76,8 +82,14 @@ func WithServerOption(opts ...grpc.ServerOption) Options {
 	}
 }
 
-// NewServer creates a new Server. The underlying *grpc.Server is built after
-// all options are applied so option order does not matter.
+func WithServiceName(serviceName string) Options {
+	return func(s *Server) error {
+		s.serviceName = serviceName
+		return nil
+	}
+}
+
+// NewServer creates a new Server.
 func NewServer(opts ...Options) *Server {
 	s := &Server{}
 
@@ -91,8 +103,7 @@ func NewServer(opts ...Options) *Server {
 	return s
 }
 
-// Server returns the underlying *grpc.Server so callers can register their
-// generated pb services (e.g. pb.RegisterFooServiceServer(s.Server(), handler)).
+// Server returns the underlying *grpc.Server so callers can register their pb.
 func (s *Server) Server() *grpc.Server {
 	return s.srv
 }
@@ -121,9 +132,8 @@ func (s *Server) Run(ctx context.Context) error {
 	return nil
 }
 
-// Shutdown gracefully stops the server and falls back to a hard Stop if the
-// context expires before in-flight RPCs finish.
-func (s *Server) Shutdown(ctx context.Context) error {
+// Stop gracefully stops the server and falls back to a hard Stop if the ctx T/O.
+func (s *Server) Stop(ctx context.Context) error {
 	s.logger.InfoContext(ctx, "shutting down grpc server")
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -154,4 +164,20 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 
 	return shutdownErr
+}
+
+// Name return the service name.
+func (s *Server) Name() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.serviceName
+}
+
+// SetServiceID set the service ID from the application handler.
+func (s *Server) SetServiceID(serviceID serviceloader.UUID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.serviceID = serviceID
 }
