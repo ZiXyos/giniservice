@@ -26,6 +26,7 @@ type provider struct {
 
 var (
 	initOnce sync.Once
+	stateMu  sync.RWMutex
 	initErr  error
 	inst     *provider
 
@@ -44,9 +45,15 @@ func Init(ctx context.Context, serviceName, serviceVersion string, cfg Config) e
 		return err
 	}
 	initOnce.Do(func() {
-		inst, initErr = newProvider(ctx, serviceName, serviceVersion, cfg)
+		p, err := newProvider(ctx, serviceName, serviceVersion, cfg)
+		stateMu.Lock()
+		inst, initErr = p, err
+		stateMu.Unlock()
 	})
-	return initErr
+	stateMu.RLock()
+	err := initErr
+	stateMu.RUnlock()
+	return err
 }
 
 func newProvider(ctx context.Context, serviceName, serviceVersion string, cfg Config) (*provider, error) {
@@ -110,29 +117,35 @@ func newProvider(ctx context.Context, serviceName, serviceVersion string, cfg Co
 // LogHandler returns a slog.Handler bound to the global OTel logger provider.
 // Returns nil if Init has not installed a provider yet.
 func LogHandler(serviceName string) slog.Handler {
-	if inst == nil || inst.lp == nil {
+	stateMu.RLock()
+	p := inst
+	stateMu.RUnlock()
+	if p == nil || p.lp == nil {
 		return nil
 	}
-	return otelslog.NewHandler(serviceName, otelslog.WithLoggerProvider(inst.lp))
+	return otelslog.NewHandler(serviceName, otelslog.WithLoggerProvider(p.lp))
 }
 
 // Shutdown flushes pending spans and logs. Idempotent: safe to call from each
 // component's own shutdown without coordination.
 func Shutdown(ctx context.Context) error {
-	if inst == nil {
+	stateMu.RLock()
+	p := inst
+	stateMu.RUnlock()
+	if p == nil {
 		return nil
 	}
 	shutOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		if inst.tp != nil {
-			if err := inst.tp.Shutdown(ctx); err != nil {
+		if p.tp != nil {
+			if err := p.tp.Shutdown(ctx); err != nil {
 				shutErr = err
 			}
 		}
-		if inst.lp != nil {
-			if err := inst.lp.Shutdown(ctx); err != nil && shutErr == nil {
+		if p.lp != nil {
+			if err := p.lp.Shutdown(ctx); err != nil && shutErr == nil {
 				shutErr = err
 			}
 		}
