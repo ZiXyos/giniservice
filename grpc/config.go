@@ -1,6 +1,6 @@
 package grpc
 
-import "github.com/zixyos/httpservice/telemetry"
+import "github.com/zixyos/giniservice/telemetry"
 
 // Config represents the configuration for the gRPC server component.
 type Config struct {

@@ -99,28 +99,35 @@ func (h *Server) Engine() *gin.Engine {
 // NewHTTPServer creates a new HTTPServer component. Telemetry is set up
 // automatically when cfg.Telemetry.Enabled, so the calling service never
 // touches the OTel provider directly.
-func NewHTTPServer(opts ...Options) *Server {
-	hs := &Server{}
+func NewHTTPServer(opts ...Options) (*HTTPServer, error) {
+	hs := &HTTPServer{}
 
 	engine := gin.Default()
 	if err := withEngine(engine)(hs); err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	for _, opt := range opts {
 		if err := opt(hs); err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 
+	var telemetryErr error
 	if hs.cfg != nil && hs.cfg.Telemetry.Enabled {
 		if err := telemetry.Init(context.Background(), hs.cfg.ServiceName, hs.cfg.ServiceVersion, hs.cfg.Telemetry); err != nil {
-			panic(err)
+			logger := hs.logger
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.Error("failed to initialize telemetry for http server", "error", err)
+			telemetryErr = err
+		} else {
+			hs.engine.Use(otelgin.Middleware(hs.cfg.ServiceName))
 		}
-		hs.engine.Use(otelgin.Middleware(hs.cfg.ServiceName))
 	}
 
-	return hs
+	return hs, telemetryErr
 }
 
 // Run starts the HTTPServer component.

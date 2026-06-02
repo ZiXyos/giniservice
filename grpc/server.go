@@ -62,6 +62,7 @@ func WithServerOption(opts ...grpc.ServerOption) Options {
 	}
 }
 
+// WithServiceName inject service name.
 func WithServiceName(serviceName string) Options {
 	return func(s *Server) error {
 		s.serviceName = serviceName
@@ -70,24 +71,31 @@ func WithServiceName(serviceName string) Options {
 }
 
 // NewServer creates a new Server.
-func NewServer(opts ...Options) *Server {
+func NewServer(opts ...Options) (*Server, error) {
 	s := &Server{}
 
 	for _, opt := range opts {
 		if err := opt(s); err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 
+	var telemetryErr error
 	if s.cfg != nil && s.cfg.Telemetry.Enabled {
 		if err := telemetry.Init(context.Background(), s.cfg.ServiceName, s.cfg.ServiceVersion, s.cfg.Telemetry); err != nil {
-			panic(err)
+			logger := s.logger
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.Error("failed to initialize telemetry for grpc server", "error", err)
+			telemetryErr = err
+		} else {
+			s.serverOpts = append(s.serverOpts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
 		}
-		s.serverOpts = append(s.serverOpts, grpc.StatsHandler(otelgrpc.NewServerHandler()))
 	}
 
 	s.srv = grpc.NewServer(s.serverOpts...)
-	return s
+	return s, telemetryErr
 }
 
 // Server returns the underlying *grpc.Server so callers can register their pb.
