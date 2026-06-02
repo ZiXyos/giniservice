@@ -3,7 +3,7 @@ package http
 import (
 	"time"
 
-	"github.com/zixyos/httpservice/telemetry"
+	"github.com/zixyos/giniservice/telemetry"
 )
 
 // Config represents the configuration for the HTTPServer component.
