@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/zixyos/giniservice/telemetry"
+	serviceloader "github.com/zixyos/goloader/service"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
@@ -26,6 +27,8 @@ type HTTPServer struct {
 	engine *gin.Engine
 
 	cfg *Config
+
+	serviceID serviceloader.UUID
 
 	tel Telemetry
 	mu  sync.RWMutex
@@ -121,7 +124,7 @@ func (h *HTTPServer) Run(ctx context.Context) error {
 }
 
 // Shutdown gracefully Shutdown HTTPServer component.
-func (h *HTTPServer) Shutdown(ctx context.Context) error {
+func (h *HTTPServer) Stop(ctx context.Context) error {
 	h.logger.Info("shutting down http server")
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -139,6 +142,12 @@ func (h *HTTPServer) Shutdown(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (h *HTTPServer) SetServiceID(serviceID serviceloader.UUID) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 }
 
 func (h *HTTPServer) Name() string {
