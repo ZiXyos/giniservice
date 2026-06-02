@@ -15,10 +15,6 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
-type Telemetry interface {
-	Shutdown(context.Context) error
-}
-
 // Server represents an HTTP Server component.
 type Server struct {
 	logger *slog.Logger
@@ -31,8 +27,7 @@ type Server struct {
 	serviceID   serviceloader.UUID
 	serviceName string
 
-	tel Telemetry
-	mu  sync.RWMutex
+	mu sync.RWMutex
 }
 
 type Options func(*Server) error
@@ -101,21 +96,35 @@ func (h *Server) Engine() *gin.Engine {
 }
 
 // NewHTTPServer creates a new HTTPServer component.
-func NewHTTPServer(opts ...Options) *Server {
+func NewHTTPServer(opts ...Options) (*Server, error) {
 	hs := &Server{}
 
 	engine := gin.Default()
 	if err := withEngine(engine)(hs); err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	for _, opt := range opts {
 		if err := opt(hs); err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 
-	return hs
+	var telemetryErr error
+	if hs.cfg != nil && hs.cfg.Telemetry.Enabled {
+		if err := telemetry.Init(context.Background(), hs.cfg.ServiceName, hs.cfg.ServiceVersion, hs.cfg.Telemetry); err != nil {
+			logger := hs.logger
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.Error("failed to initialize telemetry for http server", "error", err)
+			telemetryErr = err
+		} else {
+			hs.engine.Use(otelgin.Middleware(hs.cfg.ServiceName))
+		}
+	}
+
+	return hs, telemetryErr
 }
 
 // Run starts the HTTPServer component.
@@ -143,10 +152,8 @@ func (h *Server) Stop(ctx context.Context) error {
 		return err
 	}
 
-	if h.tel != nil {
-		if err := h.tel.Shutdown(ctx); err != nil {
-			h.logger.WarnContext(ctx, "failed to shutdown telemetry", "error", err)
-		}
+	if err := telemetry.Shutdown(ctx); err != nil {
+		h.logger.WarnContext(ctx, "failed to shutdown telemetry", "error", err)
 	}
 
 	return nil
@@ -166,22 +173,4 @@ func (h *Server) Name() string {
 	defer h.mu.RUnlock()
 
 	return h.cfg.ServiceName
-}
-
-// WithTelemetry attaches an externally-built provider so the same instance can
-// be shared with the application's logger and any other components. Passing
-// nil is a no-op.
-func WithTelemetry(p *telemetry.Provider) Options {
-	return func(hs *Server) error {
-		if p == nil {
-			return nil
-		}
-		if hs.cfg == nil {
-			return fmt.Errorf("no configuration provided")
-		}
-
-		hs.tel = p
-		hs.engine.Use(otelgin.Middleware(hs.cfg.ServiceName))
-		return nil
-	}
 }
