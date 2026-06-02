@@ -27,8 +27,7 @@ type Server struct {
 	serviceID   serviceloader.UUID
 	serviceName string
 
-	tel Telemetry
-	mu  sync.RWMutex
+	mu sync.RWMutex
 }
 
 type Options func(*Server) error
