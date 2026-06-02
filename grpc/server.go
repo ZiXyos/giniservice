@@ -62,7 +62,10 @@ func WithServerOption(opts ...grpc.ServerOption) Options {
 	}
 }
 
+<<<<<<< HEAD
 // WithServiceName inject service name.
+=======
+>>>>>>> 0f1a4e8 (fix(core) impl service interface + uuid service management (#11))
 func WithServiceName(serviceName string) Options {
 	return func(s *Server) error {
 		s.serviceName = serviceName

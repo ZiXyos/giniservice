@@ -96,11 +96,9 @@ func (h *Server) Engine() *gin.Engine {
 	return h.engine
 }
 
-// NewHTTPServer creates a new HTTPServer component. Telemetry is set up
-// automatically when cfg.Telemetry.Enabled, so the calling service never
-// touches the OTel provider directly.
-func NewHTTPServer(opts ...Options) (*HTTPServer, error) {
-	hs := &HTTPServer{}
+// NewHTTPServer creates a new HTTPServer component.
+func NewHTTPServer(opts ...Options) (*Server, error) {
+	hs := &Server{}
 
 	engine := gin.Default()
 	if err := withEngine(engine)(hs); err != nil {
