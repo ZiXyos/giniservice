@@ -123,6 +123,8 @@ github.com/ugorji/go/codec v1.3.2 h1:zkEASHHyEClGeURfgNT9PJZVfAbs9oEX9QXggwWNJbc
 github.com/ugorji/go/codec v1.3.2/go.mod h1:pRBVtBSKl77K30Bv8R2P+cLSGaTtex6fsA2Wjqmfxj4=
 github.com/zixyos/goloader v0.3.1 h1:VdtiXPdM87p4LJLqWrASOg5RUgNG47Sh2J2lXXtg0tk=
 github.com/zixyos/goloader v0.3.1/go.mod h1:4m+pahgxE8GUwya/gT1039Dkx4v+JPzeKuRgYZLFDXs=
+github.com/zixyos/goloader v1.0.0 h1:O8RHtXSndWeeyxjArrqCzkLGKgIjOZDIhsnLg+OvRDk=
+github.com/zixyos/goloader v1.0.0/go.mod h1:H046ewEGM6QmPvO0Q1BNzNUtDZmnkoZpDXMk6D3xEHs=
 go.mongodb.org/mongo-driver/v2 v2.6.0 h1:b9sJOYrkmt4l8bY43ZenFBcPlhYIjaOfYHLtbB/5qi8=
 go.mongodb.org/mongo-driver/v2 v2.6.0/go.mod h1:yOI9kBsufol30iFsl1slpdq1I0eHPzybRWdyYUs8K/0=
 go.mongodb.org/mongo-driver/v2 v2.8.0 h1:CxWDGQYY8QQwNjAl/aq2sfWakdnWZynnqJ9F4DhHbP8=
